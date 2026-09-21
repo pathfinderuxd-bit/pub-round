@@ -210,6 +210,55 @@ input[type=file]{display:none}
     var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
     document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 3500);
   }
+  /* ---------- shared store ----------
+   * A Google Sheet in Rich's Drive, behind an Apps Script web app that anyone
+   * with the URL can read and write. No logins. Each phone keeps its own copy
+   * in localStorage too, so the app opens instantly and still works offline;
+   * the sheet is what makes a tick on one phone show on the others.
+   *
+   * Newest wins, by updatedAt. A phone that edited offline pushes when it next
+   * gets through; a phone that is behind takes the sheet's copy. POST goes as
+   * text/plain because Apps Script cannot answer a CORS preflight. */
+  var REMOTE = 'https://script.google.com/macros/s/AKfycbw4n9QzvkenANYY3nXC1iollBfPs-vejVaZW19AuyjmFJyIvUev7nZE9Qq5l3O-A1tY2g/exec';
+  var pulling = false, pushTimer = null;
+
+  function norm(d){
+    if(!d.photos) d.photos = {};
+    if(!d.icons) d.icons = {};
+    if(DRINK_OPTS.indexOf(d.icons.drinks)<0) d.icons.drinks = 'beer';
+    if(FOOD_OPTS.indexOf(d.icons.food)<0) d.icons.food = 'hamburger';
+    return d;
+  }
+  function saveLocal(){ try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){} }
+
+  function pushRemote(){
+    if(!REMOTE) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){
+      if(!state.updatedAt) state.updatedAt = Date.now();
+      fetch(REMOTE, { method:'POST', body: JSON.stringify(state) })
+        .then(function(r){ return r.json(); })
+        .then(function(res){ if(!res || !res.ok) toast('Saved on this phone. Could not share it yet.'); })
+        .catch(function(){ toast('Saved on this phone. Will share when back online.'); });
+    }, 600);
+  }
+
+  function pullRemote(){
+    if(!REMOTE || pulling) return;
+    pulling = true;
+    fetch(REMOTE + '?t=' + Date.now(), { cache:'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(remote){
+        pulling = false;
+        /* An empty sheet: this phone's copy becomes the first one shared. */
+        if(!remote || !Array.isArray(remote.history)){ pushRemote(); return; }
+        var mine = Number(state.updatedAt) || 0, theirs = Number(remote.updatedAt) || 0;
+        if(theirs > mine){ state = norm(remote); saveLocal(); render(); }
+        else if(mine > theirs){ pushRemote(); }
+      })
+      .catch(function(){ pulling = false; });
+  }
+
   function loadLocal(){
     try{
       var raw = localStorage.getItem(STORE);
@@ -223,7 +272,9 @@ input[type=file]{display:none}
   }
   function doPublish(){
     if(standalone){
+      state.updatedAt = Date.now();
       try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){ toast('Could not save on this device.'); }
+      pushRemote();
       return;
     }
     if(!artifactNS) return;
@@ -493,7 +544,13 @@ input[type=file]{display:none}
   /* find out whether this viewer can save changes */
   (function(){
     var c = window.claude;
-    if(!c || !c.use){ standalone = true; writer = true; ready = true; loadLocal(); render(); return; }
+    if(!c || !c.use){
+      standalone = true; writer = true; ready = true; loadLocal(); render();
+      pullRemote();
+      document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') pullRemote(); });
+      window.addEventListener('focus', pullRemote);
+      return;
+    }
     Promise.all([c.use('artifact'), c.use('user')]).then(function(r){
       artifactNS = r[0];
       var u = r[1];

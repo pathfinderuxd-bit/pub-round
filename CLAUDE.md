@@ -14,13 +14,19 @@
 
 ## Saving
 
-The app was written as a Claude artifact, where a tick is published for every
-viewer. On Pages there is no `window.claude`, so it runs in standalone mode:
-every visitor can edit, and each device saves to its own `localStorage`. A tick
-on one phone is not seen on another. Shared saving would need a backend.
+Shared through a Google Sheet in Rich's Drive ("Pub Round data"), behind an Apps
+Script web app deployed as *Execute as: Me, Access: Anyone*. No logins. The URL
+is `REMOTE` in site/index.html.
 
-## The shape of it
-
-`site/` is the whole published site. The workflow copies it as-is, adds a
-`robots.txt` that disallows everything, and deploys. There is no build step;
-keep it that way unless one is genuinely needed.
+- The script stores the whole state as JSON down column A, in 45,000-character
+  chunks (a cell holds 50,000), each prefixed `~` so Sheets never reads one as a
+  formula. GET returns it; POST replaces it.
+- Each phone also keeps a copy in localStorage: the app opens from that
+  instantly, then pulls. Newest `updatedAt` wins. It pulls on open and whenever
+  the app returns to the front.
+- POST is sent as text/plain on purpose — Apps Script cannot answer a CORS
+  preflight, so an application/json POST fails.
+- Editing the script does nothing until **Deploy → Manage deployments → edit →
+  Version: New version**. The /exec URL keeps serving the old code otherwise.
+- Anyone with the /exec URL can write. The owner accepted that; the script only
+  accepts something with a `history` array.
