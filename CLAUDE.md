@@ -30,3 +30,19 @@ is `REMOTE` in site/index.html.
   Version: New version**. The /exec URL keeps serving the old code otherwise.
 - Anyone with the /exec URL can write. The owner accepted that; the script only
   accepts something with a `history` array.
+
+---
+
+## After committing — always ask before pushing
+
+Never push straight after a commit. Commit the work, show what changed, then
+ask a single question offering both routes:
+
+1. **Here's the command** — give the exact `git push` line to run
+2. **I can push now** — push it on a yes
+
+Offer both, pick neither, and wait for the answer. This applies to every repo
+in this workspace, nested project repos included.
+
+The one exception is when the push was already asked for in the same message
+("commit and push", "push it up") — then just do it and say so.
